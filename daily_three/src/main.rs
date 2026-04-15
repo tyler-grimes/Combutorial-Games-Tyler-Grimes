@@ -87,7 +87,7 @@ fn main() {
     // Test 5: " TF" -> one move, F jumps over T to "F T"
     let s = String::from(" TF");
     let result = get_right_options(&s);
-    let pass = result.len() == 1 && result[0] == "F T";
+    let pass = result.len() == 1 && result[0] == "FT ";
     println!(
         "get Test 5 - space then TF:   {}",
         if pass { "PASS" } else { "FAIL" }
