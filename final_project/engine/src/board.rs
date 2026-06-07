@@ -161,6 +161,34 @@ impl Position {
     pub fn can_win_next(&self) -> bool {
         self.winning_position() & self.possible() != 0
     }
+
+    /// Bitmap of moves that don't hand the opponent an immediate win.
+    /// 0 means every move loses (or no moves). Assumes we cannot win this move.
+    pub(crate) fn possible_non_losing_moves(&self) -> u64 {
+        let mut possible = self.possible();
+        let opponent_win = self.opponent_winning_position();
+        let forced = possible & opponent_win;
+        if forced != 0 {
+            if forced & (forced - 1) != 0 {
+                return 0; // two+ immediate threats: lost
+            }
+            possible = forced; // must block
+        }
+        // never play directly below an opponent winning cell
+        possible & !(opponent_win >> 1)
+    }
+
+    /// Heuristic: number of winning cells we'd own after playing `move_bit`.
+    pub(crate) fn move_score(&self, move_bit: u64) -> u32 {
+        Self::compute_winning_position(self.current | move_bit, self.mask).count_ones()
+    }
+
+    /// Play a move given as a single-bit bitmap.
+    pub(crate) fn play_bit(&mut self, move_bit: u64) {
+        self.current ^= self.mask;
+        self.mask |= move_bit;
+        self.moves += 1;
+    }
 }
 
 impl Default for Position {
@@ -259,5 +287,31 @@ mod tests {
         assert_eq!(p.moves(), 12);
         assert!(p.is_winning_move(3));
         assert!(!p.is_winning_move(0));
+    }
+
+    #[test]
+    fn forced_block_is_only_non_losing_move() {
+        // P2 to move while P1 threatens vertical win in col 1.
+        let p = Position::from_moves("12121").unwrap(); // P1 has 3 in col 0, P2 to move
+        let nl = p.possible_non_losing_moves();
+        // only legal cell: top of col 0 (block)
+        assert_eq!(nl, nl & Position::column_mask(0));
+        assert_ne!(nl, 0);
+    }
+
+    #[test]
+    fn double_threat_means_no_non_losing_moves() {
+        // P1 with open three 3,4,5 on bottom row (1-indexed): threats at cols 2 and 6.
+        // P1 plays 3,4,5 (moves 1,3,5); P2 stacks col 7 (moves 2,4). P2 to move.
+        let p = Position::from_moves("37475").unwrap();
+        assert_eq!(p.possible_non_losing_moves(), 0);
+    }
+
+    #[test]
+    fn move_score_counts_created_threats() {
+        let p = Position::new();
+        // any first move creates no immediate threats
+        let m = Position::column_mask(3) & p.possible();
+        assert_eq!(p.move_score(m), 0);
     }
 }
