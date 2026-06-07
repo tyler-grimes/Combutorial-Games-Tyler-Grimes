@@ -1,0 +1,12 @@
+[package]
+name = "engine"
+version = "0.1.0"
+edition = "2021"
+
+[dev-dependencies]
+connect-four-ai = "1.0.0"
+rand = "0.10"
+
+[[bin]]
+name = "book_gen"
+path = "src/bin/book_gen.rs"
