@@ -141,6 +141,40 @@ impl Solver {
         self.tt.put(p.key(), (alpha - MIN_SCORE + 1) as i8);
         alpha
     }
+
+    /// Exact score for each playable column (None = full).
+    pub fn analyze(&mut self, p: &Position) -> [Option<i32>; WIDTH] {
+        let cells = (WIDTH * HEIGHT) as i32;
+        let mut out = [None; WIDTH];
+        for col in 0..WIDTH {
+            if !p.can_play(col) {
+                continue;
+            }
+            if p.is_winning_move(col) {
+                out[col] = Some((cells + 1 - p.moves() as i32) / 2);
+            } else {
+                let mut child = *p;
+                child.play(col);
+                out[col] = Some(-self.solve(&child));
+            }
+        }
+        out
+    }
+
+    /// Perfect move: argmax score, center-preferred among ties.
+    /// Panics if no legal move exists (caller guarantees game not over).
+    pub fn best_move(&mut self, p: &Position) -> usize {
+        let scores = self.analyze(p);
+        let mut best: Option<(usize, i32)> = None;
+        for &col in COLUMN_ORDER.iter() {
+            if let Some(s) = scores[col] {
+                if best.map_or(true, |(_, bs)| s > bs) {
+                    best = Some((col, s));
+                }
+            }
+        }
+        best.expect("no legal moves").0
+    }
 }
 
 impl Default for Solver {
@@ -202,5 +236,33 @@ mod tests {
         // Connect-4 theory: first player wins on move 41 → score +1
         let mut s = Solver::new();
         assert_eq!(s.solve(&Position::new()), 1);
+    }
+
+    #[test]
+    fn best_move_takes_immediate_win() {
+        let p = Position::from_moves("121212").unwrap();
+        let mut s = Solver::new();
+        assert_eq!(s.best_move(&p), 0);
+    }
+
+    #[test]
+    fn best_move_blocks_immediate_threat() {
+        let p = Position::from_moves("12121").unwrap(); // P2 must block col 0
+        let mut s = Solver::new();
+        assert_eq!(s.best_move(&p), 0);
+    }
+
+    #[test]
+    fn analyze_marks_full_column_none() {
+        // "112211221122": cols 0 and 1 each filled bottom→top P1,P2,P1,P2,P1,P2
+        // (no run ≥ 3, nobody won, both columns full after 12 moves, P1 to move).
+        let p = Position::from_moves("112211221122").unwrap();
+        assert!(!p.can_play(0));
+        assert!(!p.can_play(1));
+        let mut s = Solver::new();
+        let a = s.analyze(&p);
+        assert!(a[0].is_none());
+        assert!(a[1].is_none());
+        assert!(a[3].is_some());
     }
 }

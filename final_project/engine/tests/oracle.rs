@@ -23,6 +23,30 @@ fn random_game(rng: &mut StdRng, len: usize) -> Option<String> {
 }
 
 #[test]
+fn best_move_never_worsens_outcome() {
+    // Perfect play property: score(position) == -score(position after best_move).
+    // Positions where best_move wins immediately are skipped (solver's win-score
+    // definition makes the relation trivially true there).
+    let mut rng = StdRng::seed_from_u64(7);
+    let mut s = engine::solver::Solver::new();
+    let mut checked = 0;
+    while checked < 15 {
+        let len = rng.random_range(14..=24usize);
+        let Some(moves) = random_game(&mut rng, len) else { continue };
+        let p = engine::board::Position::from_moves(&moves).unwrap();
+        let best = s.best_move(&p);
+        if p.is_winning_move(best) {
+            checked += 1;
+            continue;
+        }
+        let mut after = p;
+        after.play(best);
+        assert_eq!(s.solve(&p), -s.solve(&after), "best_move dropped value on {moves}");
+        checked += 1;
+    }
+}
+
+#[test]
 fn matches_oracle_on_random_midgame_positions() {
     let mut rng = StdRng::seed_from_u64(42);
     let mut ours = Solver::new();
