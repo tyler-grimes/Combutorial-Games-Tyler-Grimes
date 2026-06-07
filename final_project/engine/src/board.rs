@@ -108,6 +108,59 @@ impl Position {
         }
         g
     }
+
+    /// Bitmap of playable cells (lowest empty cell of each non-full column).
+    pub(crate) fn possible(&self) -> u64 {
+        (self.mask + BOTTOM_MASK) & BOARD_MASK
+    }
+
+    /// Open cells that would complete 4-in-a-row for `position` stones.
+    pub(crate) fn compute_winning_position(position: u64, mask: u64) -> u64 {
+        // vertical
+        let mut r = (position << 1) & (position << 2) & (position << 3);
+        // horizontal (shift H1)
+        let mut p = (position << H1) & (position << (2 * H1));
+        r |= p & (position << (3 * H1));
+        r |= p & (position >> H1);
+        p = (position >> H1) & (position >> (2 * H1));
+        r |= p & (position << H1);
+        r |= p & (position >> (3 * H1));
+        // diagonal \ (shift HEIGHT)
+        p = (position << HEIGHT) & (position << (2 * HEIGHT));
+        r |= p & (position << (3 * HEIGHT));
+        r |= p & (position >> HEIGHT);
+        p = (position >> HEIGHT) & (position >> (2 * HEIGHT));
+        r |= p & (position << HEIGHT);
+        r |= p & (position >> (3 * HEIGHT));
+        // diagonal / (shift HEIGHT+2 == H1+1)
+        const S: usize = HEIGHT + 2;
+        p = (position << S) & (position << (2 * S));
+        r |= p & (position << (3 * S));
+        r |= p & (position >> S);
+        p = (position >> S) & (position >> (2 * S));
+        r |= p & (position << S);
+        r |= p & (position >> (3 * S));
+        r & (BOARD_MASK ^ mask)
+    }
+
+    /// Cells where the player to move would win immediately.
+    pub(crate) fn winning_position(&self) -> u64 {
+        Self::compute_winning_position(self.current, self.mask)
+    }
+
+    /// Cells where the opponent would win immediately.
+    pub(crate) fn opponent_winning_position(&self) -> u64 {
+        Self::compute_winning_position(self.current ^ self.mask, self.mask)
+    }
+
+    pub fn is_winning_move(&self, col: usize) -> bool {
+        self.winning_position() & self.possible() & Self::column_mask(col) != 0
+    }
+
+    /// True if the player to move can win this turn in some column.
+    pub fn can_win_next(&self) -> bool {
+        self.winning_position() & self.possible() != 0
+    }
 }
 
 impl Default for Position {
@@ -170,5 +223,41 @@ mod tests {
         let c = Position::from_moves("7").unwrap();
         assert_eq!(a.canonical_key(), c.canonical_key());
         assert_ne!(a.key(), c.key());
+    }
+
+    #[test]
+    fn detects_vertical_win() {
+        // P1: col 1 four times; P2: col 2 three times. "1212121" → P1 wins playing col 1? No —
+        // build explicitly: moves 1,2,1,2,1,2 then col 1 is the winning move for P1.
+        let p = Position::from_moves("121212").unwrap();
+        assert!(p.is_winning_move(0));
+        assert!(!p.is_winning_move(1));
+    }
+
+    #[test]
+    fn detects_horizontal_win() {
+        // P1 plays cols 1,2,3 bottom row; P2 stacks col 7.
+        let p = Position::from_moves("172737").unwrap();
+        assert!(p.is_winning_move(3)); // col 4 completes 1-2-3-4
+        assert!(p.is_winning_move(4) == false);
+    }
+
+    #[test]
+    fn detects_diagonal_win() {
+        // Build / diagonal for P1: needs P1 at (c,r) = (0,0),(1,1),(2,2) and col 3
+        // filled to height 3 so P1's drop lands at (3,3).
+        // Move list (1-indexed cols), alternating P1,P2:
+        // P1:1 → (0,0)   P2:2 → (1,0)
+        // P1:2 → (1,1)   P2:3 → (2,0)
+        // P1:7 → (6,0)   P2:3 → (2,1)
+        // P1:3 → (2,2)   P2:4 → (3,0)
+        // P1:7 → (6,1)   P2:4 → (3,1)
+        // P1:7 → (6,2)   P2:4 → (3,2)
+        // Now P1 to move; col 4 lands at (3,3): completes (0,0),(1,1),(2,2),(3,3).
+        // P2 never has 4 anywhere (c3 stack is 3; scattered elsewhere).
+        let p = Position::from_moves("122373347474").unwrap();
+        assert_eq!(p.moves(), 12);
+        assert!(p.is_winning_move(3));
+        assert!(!p.is_winning_move(0));
     }
 }
