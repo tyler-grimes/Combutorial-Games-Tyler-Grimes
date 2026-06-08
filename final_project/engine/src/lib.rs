@@ -65,17 +65,23 @@ impl Engine {
             }
             return best.expect("no legal moves").0;
         }
-        // fast heuristic for early positions: pick best non-losing move by threat count
+        // fast heuristic for early positions: best non-losing move by threat count,
+        // ties broken by center-first order (first match in [3,2,4,1,5,0,6] wins)
         let possible = p.possible_non_losing_moves();
         let candidates = if possible == 0 { p.possible() } else { possible };
-        [3usize, 2, 4, 1, 5, 0, 6]
-            .iter()
-            .filter(|&&c| p.can_play(c) && candidates & Position::column_mask(c) != 0)
-            .max_by_key(|&&c| p.move_score(candidates & Position::column_mask(c)))
-            .copied()
-            .unwrap_or_else(|| {
-                (0..WIDTH).find(|&c| p.can_play(c)).expect("no legal moves")
-            })
+        let mut best_col = None;
+        let mut best_score = -1i32;
+        for col in [3usize, 2, 4, 1, 5, 0, 6] {
+            if !p.can_play(col) || candidates & Position::column_mask(col) == 0 {
+                continue;
+            }
+            let score = p.move_score(candidates & Position::column_mask(col)) as i32;
+            if score > best_score {
+                best_score = score;
+                best_col = Some(col);
+            }
+        }
+        best_col.unwrap_or_else(|| (0..WIDTH).find(|&c| p.can_play(c)).expect("no legal moves"))
     }
 
     /// Human-readable eval. Formula (exact, derived from Pons score convention):
