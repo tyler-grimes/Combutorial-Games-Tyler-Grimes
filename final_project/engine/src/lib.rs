@@ -32,25 +32,50 @@ impl Engine {
     }
 
     /// Perfect move, using the book for child scores where possible.
+    /// Falls back to a fast non-losing heuristic for early positions not covered by the book.
     pub fn best_move(&self, p: &Position) -> usize {
+        // immediate win — always instant
         for col in [3, 2, 4, 1, 5, 0, 6] {
             if p.can_play(col) && p.is_winning_move(col) {
                 return col;
             }
         }
-        let mut best: Option<(usize, i32)> = None;
-        for col in [3, 2, 4, 1, 5, 0, 6] {
-            if !p.can_play(col) {
-                continue;
+        // use exact solver only when it will be fast:
+        //   - position is deep enough (solver is quick past move 12), OR
+        //   - book covers all children (instant lookups)
+        let book_covers_children = self.book.as_ref().is_some_and(|b| {
+            [3usize, 2, 4, 1, 5, 0, 6].iter().filter(|&&c| p.can_play(c)).all(|&c| {
+                let mut child = *p;
+                child.play(c);
+                b.lookup(&child).is_some()
+            })
+        });
+        if p.moves() >= 12 || book_covers_children {
+            let mut best: Option<(usize, i32)> = None;
+            for col in [3, 2, 4, 1, 5, 0, 6] {
+                if !p.can_play(col) {
+                    continue;
+                }
+                let mut child = *p;
+                child.play(col);
+                let score = -self.solve(&child);
+                if best.is_none_or(|(_, bs)| score > bs) {
+                    best = Some((col, score));
+                }
             }
-            let mut child = *p;
-            child.play(col);
-            let score = -self.solve(&child);
-            if best.is_none_or(|(_, bs)| score > bs) {
-                best = Some((col, score));
-            }
+            return best.expect("no legal moves").0;
         }
-        best.expect("no legal moves").0
+        // fast heuristic for early positions: pick best non-losing move by threat count
+        let possible = p.possible_non_losing_moves();
+        let candidates = if possible == 0 { p.possible() } else { possible };
+        [3usize, 2, 4, 1, 5, 0, 6]
+            .iter()
+            .filter(|&&c| p.can_play(c) && candidates & Position::column_mask(c) != 0)
+            .max_by_key(|&&c| p.move_score(candidates & Position::column_mask(c)))
+            .copied()
+            .unwrap_or_else(|| {
+                (0..WIDTH).find(|&c| p.can_play(c)).expect("no legal moves")
+            })
     }
 
     /// Human-readable eval. Formula (exact, derived from Pons score convention):
