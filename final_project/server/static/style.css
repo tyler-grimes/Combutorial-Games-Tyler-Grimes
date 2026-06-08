@@ -1,0 +1,28 @@
+:root { --p1: #e74c3c; --p2: #f1c40f; --bg: #1e2a38; --cell: #2c3e50; }
+* { box-sizing: border-box; font-family: system-ui, sans-serif; }
+body { margin: 0; background: var(--bg); color: #ecf0f1; display: flex; justify-content: center; }
+.view { max-width: 480px; width: 100%; padding: 16px; }
+.hidden { display: none !important; }
+h1 { text-align: center; }
+input, button { font-size: 1rem; padding: 8px 12px; border-radius: 6px; border: none; }
+button { background: #3498db; color: white; cursor: pointer; }
+button:hover { background: #2980b9; }
+.actions, .joinrow { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; align-items: center; }
+#join-code { width: 6ch; text-transform: uppercase; }
+#rooms { list-style: none; padding: 0; }
+#rooms li { background: var(--cell); margin: 6px 0; padding: 10px; border-radius: 6px;
+            display: flex; justify-content: space-between; cursor: pointer; }
+#rooms li:hover { outline: 2px solid #3498db; }
+
+#topbar { display: flex; justify-content: space-between; align-items: center; margin: 8px 0; }
+#board { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px;
+         background: #34495e; padding: 10px; border-radius: 10px; }
+.cell { aspect-ratio: 1; border-radius: 50%; background: var(--cell); }
+.cell.p1 { background: var(--p1); }
+.cell.p2 { background: var(--p2); }
+.cell.win { box-shadow: 0 0 0 4px #2ecc71 inset; }
+.cell.playable { cursor: pointer; }
+#eval-line { min-height: 1.4em; margin-top: 8px; color: #95a5a6; font-style: italic; }
+#banner { margin-top: 12px; display: flex; gap: 8px; align-items: center; }
+#toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+         background: #c0392b; padding: 10px 16px; border-radius: 6px; }

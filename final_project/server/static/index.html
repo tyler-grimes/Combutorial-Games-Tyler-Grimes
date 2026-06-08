@@ -1,1 +1,44 @@
-<!doctype html><title>Connect 4</title>
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connect 4</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="lobby" class="view">
+  <h1>Connect 4</h1>
+  <label>Your name <input id="name" maxlength="16" placeholder="anon"></label>
+  <div class="actions">
+    <button id="create-human">Create game vs human</button>
+    <button id="create-bot">Create game vs bot</button>
+    <label><input type="checkbox" id="bot-first"> bot moves first</label>
+  </div>
+  <div class="joinrow">
+    <input id="join-code" placeholder="CODE" maxlength="4">
+    <button id="join-btn">Join</button>
+    <button id="spectate-btn">Spectate</button>
+  </div>
+  <h2>Open games</h2>
+  <ul id="rooms"></ul>
+</div>
+
+<div id="game" class="view hidden">
+  <div id="topbar">
+    <span id="room-code"></span>
+    <span id="turn-label"></span>
+    <label><input type="checkbox" id="show-eval" checked> eval</label>
+  </div>
+  <div id="board"></div>
+  <div id="eval-line"></div>
+  <div id="banner" class="hidden">
+    <span id="banner-text"></span>
+    <button id="rematch">Rematch</button>
+    <button id="leave">Back to lobby</button>
+  </div>
+</div>
+<div id="toast" class="hidden"></div>
+<script src="app.js"></script>
+</body>
+</html>
