@@ -1,6 +1,6 @@
 use crate::protocol::ServerMsg;
 use crate::state::SharedState;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 pub fn spawn_bot_move(state: SharedState, code: String) {
     tokio::spawn(async move {
@@ -26,6 +26,8 @@ pub fn spawn_bot_move(state: SharedState, code: String) {
             (col, eval)
         })
         .await;
+
+        tokio::time::sleep(Duration::from_secs(1)).await;
 
         let mut rooms = state.rooms.lock().unwrap();
         let Some(room) = rooms.get_mut(&code) else { return };
