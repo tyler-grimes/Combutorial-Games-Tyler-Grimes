@@ -72,9 +72,9 @@ impl Engine {
         format!("P{winner} wins in {plies} moves")
     }
 
-    /// Whether eval display is affordable for a position with `moves` stones.
-    pub fn eval_available(&self, moves: u32) -> bool {
-        self.book.is_some() || moves >= 12
+    /// Whether eval display is affordable: book hit (instant) or move 12+ (solver is fast).
+    pub fn eval_available(&self, p: &Position) -> bool {
+        p.moves() >= 12 || self.book.as_ref().is_some_and(|b| b.lookup(p).is_some())
     }
 }
 
