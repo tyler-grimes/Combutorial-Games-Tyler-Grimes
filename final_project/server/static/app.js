@@ -1,10 +1,11 @@
 "use strict";
 const $ = (id) => document.getElementById(id);
 let ws = null;
-let my = JSON.parse(localStorage.getItem("c4") || "null"); // {code, token, seat}
+let my = JSON.parse(localStorage.getItem("c4") || "null"); // {code, token, seat, local}
 let spectator = false;
 let lastState = null;
 let lastLine = [];
+let localPending = false;
 
 const nameVal = () => $("name").value.trim() || "anon";
 const send = (o) => ws && ws.readyState === 1 && ws.send(JSON.stringify(o));
@@ -30,7 +31,9 @@ function handle(m) {
     case "Joined":
       spectator = m.seat === 255;
       if (!spectator) {
-        my = { code: m.code, token: m.token, seat: m.seat };
+        const wasLocal = !!(my && my.local && my.code === m.code);
+        my = { code: m.code, token: m.token, seat: m.seat, local: localPending || wasLocal };
+        localPending = false;
         localStorage.setItem("c4", JSON.stringify(my));
       }
       $("room-code").textContent = `room ${m.code}`;
@@ -67,6 +70,7 @@ function handle(m) {
 
 function myColor(state) {
   if (spectator || !my) return 0;
+  if (my.local) return state.turn; // always "your" color in local mode
   return my.seat === state.p1_seat ? 1 : 2;
 }
 
@@ -117,7 +121,14 @@ function renderRooms(rooms) {
 function leave() {
   localStorage.removeItem("c4");
   my = null;
-  location.reload();
+  spectator = false;
+  lastState = null;
+  lastLine = [];
+  $("game").classList.add("hidden");
+  $("lobby").classList.remove("hidden");
+  $("banner").classList.add("hidden");
+  $("eval-line").textContent = "";
+  if (ws) ws.close(); // reconnect sends ListRooms since my is null
 }
 
 let toastTimer = null;
@@ -132,11 +143,16 @@ $("create-human").onclick = () =>
   send({ type: "CreateRoom", name: nameVal(), vs_bot: false });
 $("create-bot").onclick = () =>
   send({ type: "CreateRoom", name: nameVal(), vs_bot: true, bot_first: $("bot-first").checked });
+$("create-local").onclick = () => {
+  localPending = true;
+  send({ type: "CreateRoom", name: nameVal(), vs_bot: false, local: true });
+};
 $("join-btn").onclick = () =>
   send({ type: "JoinRoom", code: $("join-code").value.toUpperCase(), name: nameVal() });
 $("spectate-btn").onclick = () =>
   send({ type: "Spectate", code: $("join-code").value.toUpperCase() });
 $("rematch").onclick = () => send({ type: "Rematch" });
 $("leave").onclick = leave;
+$("home-btn").onclick = leave;
 
 connect();

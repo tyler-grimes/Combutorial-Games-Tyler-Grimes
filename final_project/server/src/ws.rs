@@ -87,7 +87,7 @@ fn handle_msg(
     match msg {
         ClientMsg::ListRooms => Some(ServerMsg::RoomList { rooms: state.room_list() }),
 
-        ClientMsg::CreateRoom { name, vs_bot, bot_first } => {
+        ClientMsg::CreateRoom { name, vs_bot, bot_first, local } => {
             let code = state.new_room_code();
             let mut room = Room::new(code.clone());
             let token = Uuid::new_v4().to_string();
@@ -96,7 +96,17 @@ fn handle_msg(
                 room.bot = Some(if bot_first { 0 } else { 1 });
             }
             room.players[human_seat] =
-                Some(PlayerSlot { name, token: token.clone(), connected: true, gen: 0 });
+                Some(PlayerSlot { name: name.clone(), token: token.clone(), connected: true, gen: 0 });
+            if local {
+                room.local = true;
+                let other = 1 - human_seat;
+                room.players[other] = Some(PlayerSlot {
+                    name: format!("{name} (P2)"),
+                    token: String::new(),
+                    connected: true,
+                    gen: 0,
+                });
+            }
             *room_rx = Some(room.tx.subscribe());
             let snapshot = room.snapshot();
             state.rooms.lock().unwrap().insert(code.clone(), room);
@@ -178,7 +188,7 @@ fn handle_move(col: usize, state: &SharedState, me: &Membership) -> Option<Serve
     if room.status() != "playing" {
         return Some(ServerMsg::Error { msg: "game not in progress".into() });
     }
-    if room.seat_to_move() != me.seat {
+    if !room.local && room.seat_to_move() != me.seat {
         return Some(ServerMsg::Error { msg: "not your turn".into() });
     }
     let by = room.game.turn();

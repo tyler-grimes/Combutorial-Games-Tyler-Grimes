@@ -99,6 +99,7 @@ pub struct Room {
     pub last_active: Instant,
     pub rematch_votes: [bool; 2],
     pub p1_seat: u8,
+    pub local: bool,
 }
 
 impl Room {
@@ -114,6 +115,7 @@ impl Room {
             last_active: Instant::now(),
             rematch_votes: [false, false],
             p1_seat: 0,
+            local: false,
         }
     }
 

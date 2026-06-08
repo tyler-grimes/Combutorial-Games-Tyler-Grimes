@@ -8,6 +8,8 @@ pub enum ClientMsg {
         vs_bot: bool,
         #[serde(default)]
         bot_first: bool,
+        #[serde(default)]
+        local: bool,
     },
     JoinRoom {
         code: String,
@@ -61,7 +63,7 @@ mod tests {
     fn client_msgs_parse() {
         let m: ClientMsg =
             serde_json::from_str(r#"{"type":"CreateRoom","name":"ty","vs_bot":true}"#).unwrap();
-        assert!(matches!(m, ClientMsg::CreateRoom { vs_bot: true, bot_first: false, .. }));
+        assert!(matches!(m, ClientMsg::CreateRoom { vs_bot: true, bot_first: false, local: false, .. }));
 
         let m: ClientMsg =
             serde_json::from_str(r#"{"type":"JoinRoom","code":"ABCD","name":"jo"}"#).unwrap();
