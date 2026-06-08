@@ -56,7 +56,7 @@ impl Position {
         let mut p = Position::new();
         for ch in s.chars() {
             let col = ch.to_digit(10)? as usize;
-            if col < 1 || col > WIDTH || !p.can_play(col - 1) {
+            if !(1..=WIDTH).contains(&col) || !p.can_play(col - 1) {
                 return None;
             }
             p.play(col - 1);
@@ -91,18 +91,18 @@ impl Position {
     pub fn to_grid(&self) -> [[u8; WIDTH]; HEIGHT] {
         let mut g = [[0u8; WIDTH]; HEIGHT];
         // `current` belongs to the player to move: P1 if moves is even.
-        let (p1, p2) = if self.moves % 2 == 0 {
+        let (p1, p2) = if self.moves.is_multiple_of(2) {
             (self.current, self.current ^ self.mask)
         } else {
             (self.current ^ self.mask, self.current)
         };
-        for col in 0..WIDTH {
-            for row in 0..HEIGHT {
+        for (row, grow) in g.iter_mut().enumerate() {
+            for (col, cell) in grow.iter_mut().enumerate() {
                 let bit = 1u64 << (col * H1 + row);
                 if p1 & bit != 0 {
-                    g[row][col] = 1;
+                    *cell = 1;
                 } else if p2 & bit != 0 {
-                    g[row][col] = 2;
+                    *cell = 2;
                 }
             }
         }

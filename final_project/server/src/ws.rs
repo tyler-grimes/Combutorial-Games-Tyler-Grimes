@@ -12,7 +12,6 @@ use uuid::Uuid;
 struct Membership {
     code: String,
     seat: u8,
-    token: String,
     gen: u64,
 }
 
@@ -101,7 +100,7 @@ fn handle_msg(
             *room_rx = Some(room.tx.subscribe());
             let snapshot = room.snapshot();
             state.rooms.lock().unwrap().insert(code.clone(), room);
-            *me = Some(Membership { code: code.clone(), seat: human_seat as u8, token: token.clone(), gen: 0 });
+            *me = Some(Membership { code: code.clone(), seat: human_seat as u8, gen: 0 });
             state.push_lobby_update();
             if vs_bot && bot_first {
                 bot::spawn_bot_move(state.clone(), code.clone());
@@ -125,7 +124,7 @@ fn handle_msg(
                     let gen = slot.gen;
                     *room_rx = Some(room.tx.subscribe());
                     let snapshot = room.snapshot();
-                    *me = Some(Membership { code: code.clone(), seat: seat as u8, token: tok.clone(), gen });
+                    *me = Some(Membership { code: code.clone(), seat: seat as u8, gen });
                     return Some(ServerMsg::Joined { token: tok, seat: seat as u8, code, state: snapshot });
                 }
             }
@@ -140,7 +139,7 @@ fn handle_msg(
             *room_rx = Some(room.tx.subscribe());
             let snapshot = room.snapshot();
             room.broadcast(ServerMsg::State { state: snapshot.clone() });
-            *me = Some(Membership { code: code.clone(), seat: seat as u8, token: token.clone(), gen: 0 });
+            *me = Some(Membership { code: code.clone(), seat: seat as u8, gen: 0 });
             drop(rooms);
             state.push_lobby_update();
             Some(ServerMsg::Joined { token, seat: seat as u8, code, state: snapshot })
@@ -154,7 +153,7 @@ fn handle_msg(
             room.spectators += 1;
             *room_rx = Some(room.tx.subscribe());
             let snapshot = room.snapshot();
-            *me = Some(Membership { code: code.clone(), seat: 255, token: String::new(), gen: 0 });
+            *me = Some(Membership { code: code.clone(), seat: 255, gen: 0 });
             Some(ServerMsg::Joined { token: String::new(), seat: 255, code, state: snapshot })
         }
 

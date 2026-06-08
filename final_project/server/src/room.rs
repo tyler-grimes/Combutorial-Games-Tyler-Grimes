@@ -10,13 +10,19 @@ pub struct Game {
     pub line: Vec<[usize; 2]>,
 }
 
+impl Default for Game {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Game {
     pub fn new() -> Self {
         Game { pos: Position::new(), over: false, winner: 0, line: Vec::new() }
     }
 
     pub fn turn(&self) -> u8 {
-        if self.pos.moves() % 2 == 0 { 1 } else { 2 }
+        if self.pos.moves().is_multiple_of(2) { 1 } else { 2 }
     }
 
     pub fn play(&mut self, col: usize) -> Result<(), &'static str> {

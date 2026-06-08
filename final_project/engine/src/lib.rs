@@ -46,7 +46,7 @@ impl Engine {
             let mut child = *p;
             child.play(col);
             let score = -self.solve(&child);
-            if best.map_or(true, |(_, bs)| score > bs) {
+            if best.is_none_or(|(_, bs)| score > bs) {
                 best = Some((col, score));
             }
         }
@@ -62,7 +62,7 @@ impl Engine {
         if s == 0 {
             return "Draw with perfect play".into();
         }
-        let to_move = if p.moves() % 2 == 0 { 1u8 } else { 2u8 };
+        let to_move = if p.moves().is_multiple_of(2) { 1u8 } else { 2u8 };
         let n = p.moves() as i32;
         let (winner, plies) = if s > 0 {
             (to_move, (if n % 2 == 0 { 43 } else { 44 }) - 2 * s - n)

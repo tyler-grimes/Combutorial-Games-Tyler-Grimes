@@ -67,10 +67,10 @@ pub fn generate(path: &Path, depth: u8) -> std::io::Result<()> {
             let mut child = *p;
             child.play(col);
             let key = child.canonical_key();
-            if !solved.contains_key(&key) {
+            if let std::collections::btree_map::Entry::Vacant(e) = solved.entry(key) {
                 let score = solver.solve(&child) as i8;
-                solved.insert(key, score);
-                if solved.len() % 1000 == 0 {
+                e.insert(score);
+                if solved.len().is_multiple_of(1000) {
                     eprintln!("solved {} positions", solved.len());
                 }
             }

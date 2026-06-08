@@ -29,9 +29,6 @@ impl TranspositionTable {
         }
     }
 
-    pub fn clear(&mut self) {
-        self.entries.iter_mut().for_each(|e| *e = (0, 0));
-    }
 }
 
 /// Static center-first exploration order: 3,2,4,1,5,0,6.
@@ -146,16 +143,16 @@ impl Solver {
     pub fn analyze(&mut self, p: &Position) -> [Option<i32>; WIDTH] {
         let cells = (WIDTH * HEIGHT) as i32;
         let mut out = [None; WIDTH];
-        for col in 0..WIDTH {
+        for (col, slot) in out.iter_mut().enumerate() {
             if !p.can_play(col) {
                 continue;
             }
             if p.is_winning_move(col) {
-                out[col] = Some((cells + 1 - p.moves() as i32) / 2);
+                *slot = Some((cells + 1 - p.moves() as i32) / 2);
             } else {
                 let mut child = *p;
                 child.play(col);
-                out[col] = Some(-self.solve(&child));
+                *slot = Some(-self.solve(&child));
             }
         }
         out
@@ -168,7 +165,7 @@ impl Solver {
         let mut best: Option<(usize, i32)> = None;
         for &col in COLUMN_ORDER.iter() {
             if let Some(s) = scores[col] {
-                if best.map_or(true, |(_, bs)| s > bs) {
+                if best.is_none_or(|(_, bs)| s > bs) {
                     best = Some((col, s));
                 }
             }
