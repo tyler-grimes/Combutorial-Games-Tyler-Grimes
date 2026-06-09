@@ -7,7 +7,7 @@ async fn main() {
     if book_path.exists() {
         println!("opening book loaded from {}", book_path.display());
     } else {
-        eprintln!("WARNING: no engine/book.bin — bot/eval will be slow on early moves");
+        eprintln!("no engine/book.bin — bot uses time-limited search (fine); eval display delayed until midgame");
     }
     let state = server::state::AppState::new(engine);
 

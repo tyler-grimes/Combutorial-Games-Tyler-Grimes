@@ -8,6 +8,11 @@ pub use solver::Solver;
 
 use std::path::Path;
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
+
+/// Default wall-clock budget the bot spends choosing a move when it can't look the
+/// answer up exactly (opening positions with no book coverage).
+pub const DEFAULT_MOVE_BUDGET: Duration = Duration::from_millis(2000);
 
 /// Thread-safe facade the server uses: book + solver behind one lock.
 pub struct Engine {
@@ -31,18 +36,24 @@ impl Engine {
         self.solver.lock().unwrap().solve(p)
     }
 
-    /// Perfect move, using the book for child scores where possible.
-    /// Falls back to a fast non-losing heuristic for early positions not covered by the book.
+    /// Best move with the default time budget. Plays perfectly when the position is
+    /// cheap to solve exactly (book-covered, or shallow enough for the timed search to
+    /// reach terminal depth); otherwise returns the strongest move found within budget.
     pub fn best_move(&self, p: &Position) -> usize {
-        // immediate win — always instant
+        self.best_move_timed(p, DEFAULT_MOVE_BUDGET)
+    }
+
+    /// Best move within `budget`. Exact when the book covers every child (instant
+    /// lookups); otherwise a time-limited iterative-deepening search that always
+    /// returns within roughly `budget` — so the opening never stalls.
+    pub fn best_move_timed(&self, p: &Position, budget: Duration) -> usize {
+        // Immediate win — instant.
         for col in [3, 2, 4, 1, 5, 0, 6] {
             if p.can_play(col) && p.is_winning_move(col) {
                 return col;
             }
         }
-        // use exact solver only when it will be fast:
-        //   - position is deep enough (solver is quick past move 12), OR
-        //   - book covers all children (instant lookups)
+        // Exact, instant path: book holds the score for every child position.
         let book_covers_children = self.book.as_ref().is_some_and(|b| {
             [3usize, 2, 4, 1, 5, 0, 6].iter().filter(|&&c| p.can_play(c)).all(|&c| {
                 let mut child = *p;
@@ -50,7 +61,7 @@ impl Engine {
                 b.lookup(&child).is_some()
             })
         });
-        if p.moves() >= 12 || book_covers_children {
+        if book_covers_children {
             let mut best: Option<(usize, i32)> = None;
             for col in [3, 2, 4, 1, 5, 0, 6] {
                 if !p.can_play(col) {
@@ -65,23 +76,9 @@ impl Engine {
             }
             return best.expect("no legal moves").0;
         }
-        // fast heuristic for early positions: best non-losing move by threat count,
-        // ties broken by center-first order (first match in [3,2,4,1,5,0,6] wins)
-        let possible = p.possible_non_losing_moves();
-        let candidates = if possible == 0 { p.possible() } else { possible };
-        let mut best_col = None;
-        let mut best_score = -1i32;
-        for col in [3usize, 2, 4, 1, 5, 0, 6] {
-            if !p.can_play(col) || candidates & Position::column_mask(col) == 0 {
-                continue;
-            }
-            let score = p.move_score(candidates & Position::column_mask(col)) as i32;
-            if score > best_score {
-                best_score = score;
-                best_col = Some(col);
-            }
-        }
-        best_col.unwrap_or_else(|| (0..WIDTH).find(|&c| p.can_play(c)).expect("no legal moves"))
+        // No exact coverage: bounded iterative-deepening search.
+        let deadline = Instant::now() + budget;
+        self.solver.lock().unwrap().best_move_timed(p, deadline)
     }
 
     /// Human-readable eval. Formula (exact, derived from Pons score convention):
@@ -124,5 +121,49 @@ mod tests {
         let q = Position::from_moves("12121").unwrap();
         let eval = e.eval_text(&q);
         assert!(eval.contains("wins in") || eval.contains("Draw"), "unexpected eval: {eval}");
+    }
+
+    #[test]
+    fn timed_best_move_takes_immediate_win() {
+        let e = Engine::new(None);
+        let p = Position::from_moves("121212").unwrap(); // P1 wins by playing col 0
+        assert_eq!(e.best_move(&p), 0);
+    }
+
+    #[test]
+    fn timed_best_move_blocks_immediate_threat() {
+        let e = Engine::new(None);
+        let p = Position::from_moves("12121").unwrap(); // P2 must block col 0
+        assert_eq!(e.best_move(&p), 0);
+    }
+
+    #[test]
+    fn timed_best_move_opens_fast_and_central() {
+        // Book-less opening must return within budget and not hang.
+        let e = Engine::new(None);
+        let start = Instant::now();
+        let col = e.best_move_timed(&Position::new(), Duration::from_millis(500));
+        let elapsed = start.elapsed();
+        assert!(elapsed < Duration::from_millis(1500), "opening took {elapsed:?}");
+        assert!((0..WIDTH).contains(&col));
+    }
+
+    #[test]
+    fn timed_best_move_never_worsens_outcome() {
+        // Perfect-play property on solvable midgame positions: the timed search,
+        // given enough budget to reach terminal depth, must not drop the game value.
+        use crate::solver::Solver;
+        let e = Engine::new(None);
+        let mut s = Solver::new();
+        for moves in ["44443332", "4455667", "4321234", "44455566"] {
+            let p = Position::from_moves(moves).unwrap();
+            let col = e.best_move_timed(&p, Duration::from_secs(3));
+            if p.is_winning_move(col) {
+                continue;
+            }
+            let mut after = p;
+            after.play(col);
+            assert_eq!(s.solve(&p), -s.solve(&after), "dropped value on {moves}");
+        }
     }
 }

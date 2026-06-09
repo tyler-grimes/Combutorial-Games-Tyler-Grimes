@@ -183,6 +183,15 @@ impl Position {
         Self::compute_winning_position(self.current | move_bit, self.mask).count_ones()
     }
 
+    /// Center-column control: own stones minus opponent stones in the middle column.
+    /// Center play is strongest in Connect-4, so reward it in the leaf heuristic.
+    pub(crate) fn center_bonus(&self) -> i32 {
+        let col = Self::column_mask(WIDTH / 2);
+        let mine = (self.current & col).count_ones() as i32;
+        let theirs = ((self.current ^ self.mask) & col).count_ones() as i32;
+        mine - theirs
+    }
+
     /// Play a move given as a single-bit bitmap.
     pub(crate) fn play_bit(&mut self, move_bit: u64) {
         self.current ^= self.mask;

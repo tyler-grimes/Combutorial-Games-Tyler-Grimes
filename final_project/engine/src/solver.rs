@@ -1,4 +1,13 @@
 use crate::board::{Position, WIDTH, HEIGHT};
+use std::time::Instant;
+
+/// Mate score for the timed searcher. Far above any heuristic leaf value so a proven
+/// win/loss always dominates. Encodes distance via move count: sooner mates score higher.
+const MATE: i32 = 1_000_000;
+/// Any |score| at or above this is a proven mate (heuristic values stay well below).
+const MATE_THRESHOLD: i32 = MATE - 1_000;
+/// Search window infinity.
+const INF: i32 = MATE * 2;
 
 pub(crate) const TT_SIZE: usize = 4_194_301; // prime < 2^22
 const OFFSET: i8 = 64; // shift scores so 0 can mean "vacant"
@@ -171,6 +180,128 @@ impl Solver {
             }
         }
         best.expect("no legal moves").0
+    }
+
+    /// Strongest move within a wall-clock budget, via iterative-deepening alpha-beta.
+    /// Returns exact play when the search reaches terminal depth (shallow trees, late
+    /// game); otherwise a heuristic best move from the deepest fully-completed depth.
+    /// Always returns within roughly `deadline`, so the opening never stalls.
+    pub fn best_move_timed(&mut self, p: &Position, deadline: Instant) -> usize {
+        // Immediate win — instant, no search needed.
+        for &col in COLUMN_ORDER.iter() {
+            if p.can_play(col) && p.is_winning_move(col) {
+                return col;
+            }
+        }
+        // Candidates: non-losing moves if any exist, else any playable (already lost,
+        // but must still return a legal move), in center-first order.
+        let non_losing = p.possible_non_losing_moves();
+        let mut candidates: Vec<usize> = COLUMN_ORDER
+            .iter()
+            .copied()
+            .filter(|&c| p.can_play(c) && (non_losing == 0 || non_losing & Position::column_mask(c) != 0))
+            .collect();
+        if candidates.is_empty() {
+            candidates = (0..WIDTH).filter(|&c| p.can_play(c)).collect();
+        }
+        let mut best = candidates[0];
+        // Track per-candidate scores to order the next iteration best-first (PV move).
+        let mut scored: Vec<(usize, i32)> = candidates.iter().map(|&c| (c, 0)).collect();
+        let max_depth = (WIDTH * HEIGHT) as u32 - p.moves();
+
+        for depth in 1..=max_depth {
+            scored.sort_by(|a, b| b.1.cmp(&a.1));
+            let mut alpha = -INF;
+            let mut iter_best: Option<(usize, i32)> = None;
+            let mut completed = true;
+            for entry in scored.iter_mut() {
+                let mut child = *p;
+                child.play(entry.0);
+                match self.search(&child, depth - 1, -INF, -alpha, deadline) {
+                    Some(s) => {
+                        let score = -s;
+                        entry.1 = score;
+                        if iter_best.is_none_or(|(_, bs)| score > bs) {
+                            iter_best = Some((entry.0, score));
+                        }
+                        if score > alpha {
+                            alpha = score;
+                        }
+                    }
+                    None => {
+                        completed = false;
+                        break;
+                    }
+                }
+            }
+            if let Some((col, score)) = iter_best {
+                // Commit the deepest fully-searched result; on a partial depth keep the
+                // previous depth's move (a half-finished depth can be misleading).
+                if completed {
+                    best = col;
+                    // Proven win/loss within the horizon — no deeper search can improve it.
+                    if score.abs() >= MATE_THRESHOLD {
+                        break;
+                    }
+                }
+            }
+            if !completed {
+                break;
+            }
+        }
+        best
+    }
+
+    /// Depth-limited negamax with heuristic leaf eval. `None` => aborted past deadline.
+    /// Score is from the perspective of the player to move in `p`.
+    fn search(&self, p: &Position, depth: u32, mut alpha: i32, beta: i32, deadline: Instant) -> Option<i32> {
+        // Win available now: take it. Sooner mates score higher (fewer moves played).
+        if p.can_win_next() {
+            return Some(MATE - p.moves() as i32);
+        }
+        let possible = p.possible_non_losing_moves();
+        if possible == 0 {
+            // Board full => draw; otherwise every reply loses (opponent wins next ply).
+            if p.possible() == 0 {
+                return Some(0);
+            }
+            return Some(-(MATE - p.moves() as i32 - 1));
+        }
+        if depth == 0 {
+            return Some(Self::heuristic(p));
+        }
+        // Check the clock here (interior nodes), not at the leaves, to bound overhead.
+        if Instant::now() >= deadline {
+            return None;
+        }
+        // Order moves: more created threats first, center-first tie-break.
+        let mut moves: Vec<(u32, u64)> = Vec::with_capacity(WIDTH);
+        for (rank, &col) in COLUMN_ORDER.iter().enumerate() {
+            let m = possible & Position::column_mask(col);
+            if m != 0 {
+                moves.push((p.move_score(m) * 8 + (WIDTH - rank) as u32, m));
+            }
+        }
+        moves.sort_by(|a, b| b.0.cmp(&a.0));
+        for (_, m) in moves {
+            let mut child = *p;
+            child.play_bit(m);
+            let score = -self.search(&child, depth - 1, -beta, -alpha, deadline)?;
+            if score >= beta {
+                return Some(score);
+            }
+            if score > alpha {
+                alpha = score;
+            }
+        }
+        Some(alpha)
+    }
+
+    /// Leaf heuristic (player-to-move perspective): threat differential + center control.
+    fn heuristic(p: &Position) -> i32 {
+        let my_threats = p.winning_position().count_ones() as i32;
+        let opp_threats = p.opponent_winning_position().count_ones() as i32;
+        3 * (my_threats - opp_threats) + p.center_bonus()
     }
 }
 
