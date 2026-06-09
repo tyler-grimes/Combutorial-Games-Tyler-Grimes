@@ -187,6 +187,27 @@ async fn rematch_swaps_starting_player() {
 }
 
 #[tokio::test]
+async fn local_rematch_resets_with_single_vote() {
+    // In pass-and-play mode one client owns both seats, so a single Rematch
+    // click must reset the board — there is no second client to vote.
+    let url = spawn_app().await;
+    let mut a = ws(&url).await;
+    send(&mut a, json!({"type":"CreateRoom","name":"alice","vs_bot":false,"local":true})).await;
+    let joined = recv_type(&mut a, "Joined").await;
+    assert_eq!(joined["state"]["status"], "playing");
+    // P1 vertical win in col 0; the single client plays both seats.
+    for col in [0usize, 1, 0, 1, 0, 1, 0] {
+        send(&mut a, json!({"type":"Move","col":col})).await;
+        recv_type(&mut a, "State").await;
+    }
+    recv_type(&mut a, "GameOver").await;
+    send(&mut a, json!({"type":"Rematch"})).await;
+    let st = recv_type(&mut a, "State").await;
+    assert_eq!(st["state"]["status"], "playing");
+    assert_eq!(st["state"]["board"][0][0], 0, "board should be fresh after rematch");
+}
+
+#[tokio::test]
 async fn spectator_sees_moves() {
     let url = spawn_app().await;
     let (mut a, mut b, code, _) = start_game(&url).await;

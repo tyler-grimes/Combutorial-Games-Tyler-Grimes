@@ -229,9 +229,11 @@ fn handle_rematch(state: &SharedState, me: &Membership) -> Option<ServerMsg> {
         return Some(ServerMsg::Error { msg: "game not over".into() });
     }
     room.rematch_votes[me.seat as usize] = true;
-    let all_voted = (0..2).all(|s| {
-        room.bot == Some(s as u8) || room.rematch_votes[s] || room.players[s].is_none()
-    });
+    // In local pass-and-play one client owns both seats, so a single vote rematches.
+    let all_voted = room.local
+        || (0..2).all(|s| {
+            room.bot == Some(s as u8) || room.rematch_votes[s] || room.players[s].is_none()
+        });
     if all_voted {
         room.rematch();
         room.last_active = Instant::now();
